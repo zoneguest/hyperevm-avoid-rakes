@@ -1,0 +1,4 @@
+interface:
+  display_name: "HyperEVM Avoid Rakes"
+  short_description: "Avoid HyperEVM integration pitfalls"
+  default_prompt: "Use $hyperevm-avoid-rakes to review this HyperEVM dApp architecture for precompile and CoreWriter pitfalls."

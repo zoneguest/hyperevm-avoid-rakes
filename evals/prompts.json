@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "case_id": "async-receipt-not-settled",
+      "prompt": "A vault calls bridgeToPerp and receives a successful EVM transaction receipt. Can it immediately mark the amount as settled in the HyperCore perp account? Explain what the receipt proves, what can still happen, and what the vault should store."
+    },
+    {
+      "case_id": "partial-perp-to-evm-bridge",
+      "prompt": "Design the state machine for a bridgeFromPerp flow that first moves funds from perp to spot and then bridges spot to EVM. What must happen if the first leg succeeds but the second leg fails?"
+    },
+    {
+      "case_id": "pending-bridge-accounting",
+      "prompt": "A vault's totalAssets is computed as its EVM USDC balance plus an Account Margin Summary read. What accounting hazard appears after an EVM-to-perp bridge request in block n but before the Core-side balance updates?"
+    },
+    {
+      "case_id": "rpc-block-perspective",
+      "prompt": "Why might an eth_call around blocks n and n+1 show an unexpected zero or combination of spot and perp balances even though the transaction-level bridge flow is not actually insolvent? What should a risk engine do?"
+    },
+    {
+      "case_id": "historical-precompile-indexing",
+      "prompt": "A product needs a historical TVL chart whose value includes a HyperCore precompile read. What data architecture should you choose before assuming ordinary blockchain backfill will work?"
+    },
+    {
+      "case_id": "usdc-route-change",
+      "prompt": "A direct EVM-to-perp USDC bridge works today, but a bridge control may later route the transfer to spot instead. How should a production protocol handle that possibility?"
+    },
+    {
+      "case_id": "bridge-reserve-exhaustion",
+      "prompt": "Can a contract with a fully funded HyperCore perp balance assume that a withdrawal to HyperEVM will settle immediately if the bridge reserve is temporarily short? What protocol consequences follow?"
+    },
+    {
+      "case_id": "activation-and-fees",
+      "prompt": "A production deployment emits CoreWriter calls, but none of the expected HyperCore actions appear to trigger and the EVM transactions do not obviously revert. What preconditions and operational balances should you investigate?"
+    },
+    {
+      "case_id": "signed-account-value-cast",
+      "prompt": "Review this Solidity accounting expression for a production vault: uint256(int256(summary.accountValue)) + usdc.balanceOf(address(this)). What can go wrong, and what should replace the assumption?"
+    },
+    {
+      "case_id": "api-wallet-capability-gap",
+      "prompt": "A vault needs spot bridging, spot/perp conversion, leverage updates, and order creation, but the current CoreWriter capability matrix lacks one of those actions. What architecture should you propose?"
+    },
+    {
+      "case_id": "api-wallet-provisioning-and-revocation",
+      "prompt": "Before shipping an API-wallet flow, which lifecycle and failure cases must be tested and documented for users?"
+    },
+    {
+      "case_id": "simulator-versus-live-semantics",
+      "prompt": "Can a local Foundry mock, fork, or simulator prove that a HyperEVM protocol's precompile and CoreWriter integration will work in production? Give a layered test plan."
+    },
+    {
+      "case_id": "precompile-input-validation-and-encoding",
+      "prompt": "An adapter accepts a token index, market index, and account address before calling a HyperCore read or CoreWriter action. What implementation and test precautions are needed?"
+    },
+    {
+      "case_id": "reconciliation-incentive",
+      "prompt": "The architecture says a bot will reconcile pending CoreWriter transfers every hour. What questions must be answered before accepting that design?"
+    },
+    {
+      "case_id": "crops-full-stack",
+      "prompt": "A protocol's contracts are permissionless, but its only frontend, indexer, RPC, API-wallet relay, and recovery bot are hosted by one team. What trust assumptions remain?"
+    },
+    {
+      "case_id": "source-era-freshness",
+      "prompt": "You found a January 2026 engineer's article describing HyperEVM precompile pitfalls. Which parts can you safely copy into a production design, and how should the rest be handled?"
+    },
+    {
+      "case_id": "risk-sensitive-precompile-read",
+      "prompt": "A lending protocol wants to use a latest Account Margin Summary precompile read directly to set collateral limits and mint receipt tokens. What must be established before allowing that?"
+    }
+  ]
+}

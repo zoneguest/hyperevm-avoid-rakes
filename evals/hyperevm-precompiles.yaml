@@ -1,0 +1,298 @@
+schema_version: 1
+skill: hyperevm-avoid-rakes
+description: "Paired capability-uplift evals for HyperEVM Precompiles, CoreWriter, and HyperCore protocol architecture."
+source_policy: "The captured X Article is historical evidence. Current protocol behavior must be labeled verified or unresolved."
+
+conditions:
+  with_skill:
+    context: "Load SKILL.md and only the reference files listed by each case."
+  baseline:
+    context: "Load no skill, references, article capture, or web material."
+
+scoring:
+  scale: "0-2 per case"
+  pass: "Score 2: all expected facts are conveyed, no fail condition is triggered, and any source-era/current boundary is handled correctly."
+  partial: "Score 1: at least half of the expected facts are conveyed, no critical fail condition is triggered, and no unsafe unconditional claim is made."
+  fail: "Score 0: any critical fail condition is triggered, an unsafe claim is made, or fewer than half of the expected facts are conveyed."
+  normalized_score: "Weighted mean score divided by 2, reported as a percentage."
+  uplift: "With-skill normalized score minus baseline normalized score, computed on the same case and replicate pairs."
+
+evals:
+  - id: async-receipt-not-settled
+    rake_problem: "EVM receipt mistaken for HyperCore settlement"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+    prompt: "A vault calls bridgeToPerp and receives a successful EVM transaction receipt. Can it immediately mark the amount as settled in the HyperCore perp account? Explain what the receipt proves, what can still happen, and what the vault should store."
+    expected_facts:
+      - "The EVM receipt proves EVM-side request acceptance, not terminal HyperCore execution."
+      - "CoreWriter processing is asynchronous and can succeed or fail later."
+      - "The vault needs explicit pending, settled, and failed/recovery states plus reconciliation evidence."
+    fail_if:
+      - "Treats the EVM receipt as proof that the perp balance was credited."
+      - "Says a later HyperCore failure automatically reverts the earlier EVM transaction."
+      - "Describes the CoreWriter action as synchronous or atomic with the EVM call."
+
+  - id: partial-perp-to-evm-bridge
+    rake_problem: "Two-leg withdrawal modeled as one atomic operation"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+    prompt: "Design the state machine for a bridgeFromPerp flow that first moves funds from perp to spot and then bridges spot to EVM. What must happen if the first leg succeeds but the second leg fails?"
+    expected_facts:
+      - "The first leg can succeed while the second leg fails, leaving funds in spot."
+      - "Each leg needs a distinct status under one operation ID; a receipt alone cannot close the operation."
+      - "There must be an idempotent reconciliation/retry or recovery path and a user exit that does not depend on the original operator or frontend."
+    fail_if:
+      - "Claims the two calls roll back together because they were initiated by one EVM transaction."
+      - "Marks the withdrawal complete after only the first leg."
+      - "Requires an undocumented admin intervention as the only recovery path."
+
+  - id: pending-bridge-accounting
+    rake_problem: "Transient undercount or optimistic overcount in totalAssets"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+    prompt: "A vault's totalAssets is computed as its EVM USDC balance plus an Account Margin Summary read. What accounting hazard appears after an EVM-to-perp bridge request in block n but before the Core-side balance updates?"
+    expected_facts:
+      - "The EVM-side balance can decrease before the HyperCore perp balance increases."
+      - "A raw sum can temporarily understate value and affect exchange rates, borrowing, redemption, or solvency decisions."
+      - "The design must explicitly track pending value or conservatively mark it unavailable, without double-counting or optimistically counting a future Core balance."
+    fail_if:
+      - "Says the raw EVM balance plus precompile read is always safe immediately after the call."
+      - "Counts the future perp balance before settlement is proven."
+      - "Ignores the block-boundary interval because the EVM transaction succeeded."
+
+  - id: rpc-block-perspective
+    rake_problem: "RPC snapshot confused with transaction-visible intermediate state"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+      - references/reads-indexing-and-tooling.md
+    prompt: "Why might an eth_call around blocks n and n+1 show an unexpected zero or combination of spot and perp balances even though the transaction-level bridge flow is not actually insolvent? What should a risk engine do?"
+    expected_facts:
+      - "RPC block-tag reads have a snapshot perspective that may not reproduce a transaction inserted partway through a block."
+      - "Bridge settlement and start-of-block transfer ordering can create a one-block observation gap or provider-dependent result."
+      - "The risk engine must define a boundary policy: avoid the window, reconcile it conservatively, and compare live behavior across providers rather than hard-coding one quirk."
+    fail_if:
+      - "Treats every eth_call result as the exact in-transaction state seen by all callers."
+      - "Uses a surprising zero from one RPC as proof that funds were lost without checking settlement/reconciliation."
+      - "Recommends silently ignoring provider disagreement for a solvency decision."
+
+  - id: historical-precompile-indexing
+    rake_problem: "Backfilling precompile views as ordinary historical state"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/reads-indexing-and-tooling.md
+    prompt: "A product needs a historical TVL chart whose value includes a HyperCore precompile read. What data architecture should you choose before assuming ordinary blockchain backfill will work?"
+    expected_facts:
+      - "Historical precompile-read support must be verified for the exact current provider; the article's limitation is source-era, not a permanent specification."
+      - "Do not build the product around backfilling historic precompile calls until demonstrated; use event-first data and live per-block snapshots for values not reconstructable from events."
+      - "Snapshots need block, timestamp, provider, schema, gap, and reconciliation metadata, with a scaling plan for parameterized user reads."
+    fail_if:
+      - "Assumes every RPC can replay a precompile-containing view at arbitrary historical blocks."
+      - "Presents a latest read as a historical value without qualification."
+      - "Makes an opaque hosted indexer the only path for critical user exits."
+
+  - id: usdc-route-change
+    rake_problem: "Direct-to-perp bridge route treated as permanent"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/preconditions-and-permissions.md
+      - references/source-material.md
+    prompt: "A direct EVM-to-perp USDC bridge works today, but a bridge control may later route the transfer to spot instead. How should a production protocol handle that possibility?"
+    expected_facts:
+      - "The source reports a disableDexForwarding-style control that can disable direct forwarding to perp and route funds to spot; this must be verified against the current deployed bridge."
+      - "The protocol should feature-probe the route and implement/test an alternate spot-to-perp or recovery path."
+      - "The route is a versioned external dependency, not a permanent assumption hidden in the contract."
+    fail_if:
+      - "Assumes direct-to-perp routing can never change."
+      - "Says funds will always arrive in perp even if the route is disabled."
+      - "Has no fallback, status, or recovery behavior for spot delivery."
+
+  - id: bridge-reserve-exhaustion
+    rake_problem: "Bridge balance treated as guaranteed 1:1 liquidity"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/preconditions-and-permissions.md
+    prompt: "Can a contract with a fully funded HyperCore perp balance assume that a withdrawal to HyperEVM will settle immediately if the bridge reserve is temporarily short? What protocol consequences follow?"
+    expected_facts:
+      - "No; the source reports that the bridge may not be backed 1:1 and can run out of USDC, causing a Core-to-EVM bridge to fail or wait."
+      - "Redemption, liquidation, and collateral assumptions must tolerate delayed or failed settlement."
+      - "The failure must be visible, recoverable, and tied to a source-domain/user exit rather than an unbounded retry loop."
+    fail_if:
+      - "Says a settled perp balance guarantees immediate EVM liquidity."
+      - "Builds liquidation or redemption safety on an assumption of infinite bridge reserves."
+      - "Hides reserve exhaustion as a generic frontend loading state."
+
+  - id: activation-and-fees
+    rake_problem: "Runtime activation and fee preconditions omitted"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/preconditions-and-permissions.md
+    prompt: "A production deployment emits CoreWriter calls, but none of the expected HyperCore actions appear to trigger and the EVM transactions do not obviously revert. What preconditions and operational balances should you investigate?"
+    expected_facts:
+      - "Verify that the contract/account is activated on HyperCore under the current rules."
+      - "Each route/action may require specific fee assets in specific EVM or Core locations; these rules must be verified rather than assumed."
+      - "Fee reserves, per-contract top-ups, depletion alerts, and restoration behavior need explicit ownership and tests."
+    fail_if:
+      - "Checks only EVM gas and concludes the action should work."
+      - "Assumes CoreWriter actions are free or that one shared balance automatically funds every contract."
+      - "Makes an undocumented operator top-up the only liveness mechanism."
+
+  - id: signed-account-value-cast
+    rake_problem: "Signed perp equity cast into unsigned token accounting"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+      - references/source-material.md
+    prompt: "Review this Solidity accounting expression for a production vault: uint256(int256(summary.accountValue)) + usdc.balanceOf(address(this)). What can go wrong, and what should replace the assumption?"
+    expected_facts:
+      - "Account value is signed/risk-bearing perp data, not automatically an ERC-20 balance."
+      - "Casting a negative signed value to uint256 can create a huge positive number and corrupt solvency/accounting."
+      - "The protocol needs an explicit policy for negative equity, unrealized PnL, liabilities, fees, haircuts, and units before combining values."
+    fail_if:
+      - "Calls the expression safe for all account values."
+      - "Says a negative account value becomes zero automatically."
+      - "Treats Account Margin Summary as a fungible token balance without risk treatment."
+
+  - id: api-wallet-capability-gap
+    rake_problem: "API wallet added without modeling missing CoreWriter capabilities"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/preconditions-and-permissions.md
+    prompt: "A vault needs spot bridging, spot/perp conversion, leverage updates, and order creation, but the current CoreWriter capability matrix lacks one of those actions. What architecture should you propose?"
+    expected_facts:
+      - "Check the current action matrix; the article's missing-leverage example is source-era evidence, not a current guarantee."
+      - "A hybrid contract/API-wallet architecture may be required, with each operation assigned to the least-authority actor that can perform it."
+      - "API-wallet permissions, caps, expiry, revocation, and a contract-only/direct-user escape must be designed before integration."
+    fail_if:
+      - "Assumes CoreWriter supports every needed operation without verification."
+      - "Grants the API wallet unrestricted control over user funds or positions."
+      - "Makes the API service the only withdrawal or close-position path."
+
+  - id: api-wallet-provisioning-and-revocation
+    rake_problem: "API-wallet lifecycle and key custody treated as UX details"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/preconditions-and-permissions.md
+    prompt: "Before shipping an API-wallet flow, which lifecycle and failure cases must be tested and documented for users?"
+    expected_facts:
+      - "Verify current creation, authorization, prior-history, action, and revocation rules; test fresh and previously used keys."
+      - "Enforce operation scope, asset/symbol limits, leverage or amount caps, expiry, nonce/replay protection, and revocation in a security boundary—not only a prompt or backend."
+      - "The protocol must survive key loss, compromise, provider/operator disappearance, and user exit without exposing a private key in the frontend or repository."
+    fail_if:
+      - "Says a prompt or backend check is sufficient authorization."
+      - "Recommends putting the API-wallet private key in frontend code or Git."
+      - "Omits revocation or a user-controlled escape path."
+
+  - id: simulator-versus-live-semantics
+    rake_problem: "Mocks, forks, or local tools mistaken for live precompile semantics"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/reads-indexing-and-tooling.md
+      - references/source-material.md
+    prompt: "Can a local Foundry mock, fork, or simulator prove that a HyperEVM protocol's precompile and CoreWriter integration will work in production? Give a layered test plan."
+    expected_facts:
+      - "Unit tests and mocks prove local logic and modeled failure handling, not that the model matches HyperCore."
+      - "The current hyper-evm-lib simulator should be checked at a pinned version for action/edge-case coverage; the article's Foundry limitation is not permanent."
+      - "Live small-value tests are still required for current encodings, activation, fees, settlement timing, bridge liquidity, RPC behavior, and operator/vendor liveness."
+    fail_if:
+      - "Claims a mock, fork, or simulator alone proves live precompile/CoreWriter behavior."
+      - "Treats the article's historical tooling limitation as an unconditional current fact."
+      - "Omits live testing of delayed failure or block-boundary behavior."
+
+  - id: precompile-input-validation-and-encoding
+    rake_problem: "Hand-encoded actions and invalid precompile inputs under-tested"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/reads-indexing-and-tooling.md
+    prompt: "An adapter accepts a token index, market index, and account address before calling a HyperCore read or CoreWriter action. What implementation and test precautions are needed?"
+    expected_facts:
+      - "Use the current L1Read/CoreWriter definitions and versioned action encoding rather than copying bytes from an example."
+      - "Validate indices, addresses, and other inputs before calling; current documentation warns invalid precompile inputs can error and consume all gas in the call frame."
+      - "Include invalid-input, gas, encoding-version, and action-specific failure cases in tests."
+    fail_if:
+      - "Says invalid precompile inputs are harmless or cheap to ignore."
+      - "Hard-codes source-image action bytes or addresses without current chain verification."
+      - "Tests only valid inputs and happy-path receipts."
+
+  - id: reconciliation-incentive
+    rake_problem: "Implicit scheduler/operator assumed for async recovery"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+      - references/prebuild-checklist.md
+    prompt: "The architecture says a bot will reconcile pending CoreWriter transfers every hour. What questions must be answered before accepting that design?"
+    expected_facts:
+      - "Smart contracts do not wake up or run scheduled jobs; a caller must pay gas."
+      - "The design must identify who calls reconciliation, why they do it, and whether the incentive covers gas and risk."
+      - "Critical recovery should remain permissionless or have a documented, user-accessible fallback if the bot/team disappears."
+    fail_if:
+      - "Assumes the contract or blockchain automatically runs the hourly job."
+      - "Treats an unnamed operator as a guaranteed liveness mechanism."
+      - "Provides no incentive, fallback, or user escape."
+
+  - id: crops-full-stack
+    rake_problem: "Permissionless contracts mistaken for a permissionless dApp"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/prebuild-checklist.md
+      - references/source-material.md
+    prompt: "A protocol's contracts are permissionless, but its only frontend, indexer, RPC, API-wallet relay, and recovery bot are hosted by one team. What trust assumptions remain?"
+    expected_facts:
+      - "Censorship and liveness risks remain in the frontend, RPC, indexer, relay, bridge, API wallet, and recovery operator."
+      - "The whole stack needs a documented open/fork/self-host path, alternate providers or direct calls, and user exits that do not depend on the team."
+      - "Privacy and security review must include IP/telemetry, public balances/timing, keys, admin/issuer powers, vendor disappearance, and user walkaway."
+    fail_if:
+      - "Says permissionless contracts eliminate all centralization or censorship risk."
+      - "Treats a README disclosure as a mitigation without an alternate route."
+      - "Omits vendor liveness, privacy metadata, or user exit."
+
+  - id: source-era-freshness
+    rake_problem: "Historical field report treated as current protocol specification"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/source-material.md
+    prompt: "You found a January 2026 engineer's article describing HyperEVM precompile pitfalls. Which parts can you safely copy into a production design, and how should the rest be handled?"
+    expected_facts:
+      - "Use the article as historical field evidence and preserve the class of risk, not as an immutable current specification."
+      - "Verify addresses, ABIs, action support, bridge routing/liquidity, activation/fees, RPC semantics, API-wallet rules, and tool behavior against current primary sources and live tests."
+      - "Record verification dates and label facts as source claims, derived guardrails, current facts, or unresolved assumptions."
+    fail_if:
+      - "Copies article-era addresses, capabilities, or fee rules into production without verification."
+      - "Says the article is authoritative because it came from an engineer."
+      - "Fails to distinguish a verified current fact from an unresolved assumption."
+
+  - id: risk-sensitive-precompile-read
+    rake_problem: "Latest precompile read used as an unqualified oracle/collateral value"
+    critical: true
+    weight: 2
+    reference_files:
+      - references/cross-domain-invariants.md
+      - references/reads-indexing-and-tooling.md
+    prompt: "A lending protocol wants to use a latest Account Margin Summary precompile read directly to set collateral limits and mint receipt tokens. What must be established before allowing that?"
+    expected_facts:
+      - "The value's block perspective, signed units, freshness, and relationship to pending bridge operations must be explicit."
+      - "The protocol needs conservative treatment around async settlement and RPC snapshot boundaries, not a raw read assumed accurate for every intra-block decision."
+      - "Historical/indexing limitations, negative equity, liabilities, and failure/reconciliation behavior must be tested before the value controls minting or borrowing."
+    fail_if:
+      - "Calls the latest read a universally safe oracle with no freshness or boundary policy."
+      - "Ignores negative account value or pending bridge state."
+      - "Uses an RPC-derived value for collateral without testing provider/block perspective."
