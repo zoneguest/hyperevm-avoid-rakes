@@ -11,7 +11,7 @@ Use this skill for a new or existing dApp, vault, market, bridge adapter, or pro
 
 ## Evidence boundary
 
-The local source is a field report from a January 2026 integration, not a protocol specification. Treat its concrete behavior, addresses, function names, fee rules, API-wallet limitations, and provider observations as source-era claims. Before implementation, verify each one against current Hyperliquid documentation, SDK/library source, deployed bytecode, chain configuration, and live RPC behavior. Record the verification date and unresolved assumptions. Never copy the example USDC address or precompile calls into production without current chain-specific verification.
+This skill is sourced from integration experience as of Q2 2026. Treat its concrete behavior, addresses, function names, fee rules, API-wallet limitations, and provider observations as source-era claims. Before implementation, verify each one against current Hyperliquid documentation, SDK/library source, deployed bytecode, chain configuration, and live RPC behavior. Record the verification date and unresolved assumptions. Never copy the example USDC address or precompile calls into production without current chain-specific verification.
 
 ## Answer priorities under a tight word limit
 
